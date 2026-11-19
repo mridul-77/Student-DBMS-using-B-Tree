@@ -59,6 +59,9 @@ class FileRecordStore : public RecordStore {
 
    public:
     explicit FileRecordStore(const std::string& dir) : directory(dir) {
+#ifdef _WIN32
+        _setmaxstdio(8192);  // Windows allows only 512 open FILE* by default; raise to the maximum
+#endif
         MAKE_DIR(directory.c_str());  // create DBFiles if missing (no-op if it exists)
     }
 
