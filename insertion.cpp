@@ -94,7 +94,7 @@ void BPTree::insertInternal(int x, InternalNode* cursor, Node* child) {  //in In
     cout << "Overflow in internal:( HAIYAA! splitting internal nodes" << endl;
 
     //exclude middle element while splitting: it moves UP and stays in neither half
-    int partitionIdx = cursor->keys.size() / 2;  //right biased
+    int partitionIdx = cursor->keys.size() / 2;  //if the halves are uneven, the left node gets the extra key
     int partitionKey = cursor->keys[partitionIdx];
 
     InternalNode* newInternalNode = new InternalNode;

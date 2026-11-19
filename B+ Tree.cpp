@@ -83,6 +83,10 @@ int main() {
     FileRecordStore store("DBFiles");
     StudentDatabase db(bPTree, store);
 
+    int loaded = db.loadFromStorage();  // records from earlier runs are still on disk
+    if (loaded > 0)
+        cout << "\nLoaded " << loaded << " existing record(s) from DBFiles" << endl;
+
     bool flag = true;
     int option;
 

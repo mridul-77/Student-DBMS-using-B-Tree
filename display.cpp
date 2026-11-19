@@ -4,16 +4,16 @@
 
 using namespace std;
 
-void BPTree::display(Node* cursor) const {
+void BPTree::display() const {
     /*
         Level Order Display (BFS): one tree level per line, nodes separated by ||
     */
-    if (cursor == nullptr) {
+    if (root == nullptr) {
         cout << "No Data in the Database yet!" << endl;
         return;
     }
     queue<Node*> q;
-    q.push(cursor);
+    q.push(root);
 
     while (!q.empty()) {
         int sz = q.size();
@@ -36,11 +36,11 @@ void BPTree::display(Node* cursor) const {
     }
 }
 
-void BPTree::seqDisplay(Node* cursor) const {
+void BPTree::seqDisplay() const {
     /*
         Sequential Display: walk the linked list of leaves (all keys in sorted order)
     */
-    LeafNode* firstLeft = firstLeftNode(cursor);
+    LeafNode* firstLeft = firstLeftNode(root);
 
     if (firstLeft == nullptr) {
         cout << "No Data in the Database yet!" << endl;

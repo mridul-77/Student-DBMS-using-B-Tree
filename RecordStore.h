@@ -2,21 +2,26 @@
 #define RECORD_STORE_H
 
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <unordered_set>
+#include <utility>
+#include <vector>
 
 #ifdef _WIN32
 #include <direct.h>
+#include <io.h>
 #define MAKE_DIR(path) _mkdir(path)
 #else
 #include <sys/stat.h>
+#include <dirent.h>
 #define MAKE_DIR(path) mkdir(path, 0755)
 #endif
 
 /*
     Storage layer.
 
-    RecordStore is an abstract interface (Interface Segregation: only the three
+    RecordStore is an abstract interface (Interface Segregation: only the four
     operations the database needs). StudentDatabase depends on this abstraction,
     not on files directly (Dependency Inversion), so a new storage backend can be
     added as another subclass without touching the B+ Tree or the database code
@@ -36,6 +41,7 @@ class RecordStore {
     virtual FILE* write(const Student& s) = 0;                         // persist a record, return its data pointer
     virtual bool read(FILE* dataPtr, std::string& tuple) const = 0;    // load a record through its data pointer
     virtual bool remove(int rollNo, FILE* dataPtr) = 0;                // delete a record from storage
+    virtual std::vector<std::pair<int, FILE*>> loadAll() = 0;          // every record saved earlier, as (rollNo, data pointer)
 };
 
 /*
@@ -93,6 +99,47 @@ class FileRecordStore : public RecordStore {
             openFiles.erase(dataPtr);
         }
         return std::remove(pathFor(rollNo).c_str()) == 0;
+    }
+
+    std::vector<std::pair<int, FILE*>> loadAll() override {
+        std::vector<std::pair<int, FILE*>> records;
+        for (const std::string& fileName : listFiles()) {
+            // only files named exactly "<rollNo>.txt" are records
+            char* end = nullptr;
+            long rollNo = std::strtol(fileName.c_str(), &end, 10);
+            if (end == fileName.c_str() || std::to_string(rollNo) + ".txt" != fileName)
+                continue;
+
+            FILE* fp = fopen(pathFor((int)rollNo).c_str(), "r+");
+            if (fp == nullptr)
+                continue;
+            openFiles.insert(fp);
+            records.push_back({(int)rollNo, fp});
+        }
+        return records;
+    }
+
+   private:
+    std::vector<std::string> listFiles() const {
+        std::vector<std::string> names;
+#ifdef _WIN32
+        _finddata_t info;
+        intptr_t handle = _findfirst((directory + "/*.txt").c_str(), &info);
+        if (handle == -1)
+            return names;
+        do {
+            names.push_back(info.name);
+        } while (_findnext(handle, &info) == 0);
+        _findclose(handle);
+#else
+        DIR* dir = opendir(directory.c_str());
+        if (dir == nullptr)
+            return names;
+        while (dirent* entry = readdir(dir))
+            names.push_back(entry->d_name);
+        closedir(dir);
+#endif
+        return names;
     }
 };
 

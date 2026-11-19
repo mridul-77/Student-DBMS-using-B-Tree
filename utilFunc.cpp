@@ -1,10 +1,11 @@
 #include <iostream>
 #include <algorithm>
+#include <stdexcept>
 #include "B+ Tree.h"
 
 using namespace std;
 
-BPTree::BPTree() {
+BPTree::BPTree() : BPTree(4, 3) {
     /*
         By Default it will take the maxIntChildLimit as 4. And
         maxLeafNodeLimit as 3.
@@ -17,12 +18,13 @@ BPTree::BPTree() {
         nodes in the leafs as compared to the internal Nodes. Thats the
         reson to reperate out these to variables.
     */
-    this->maxIntChildLimit = 4;
-    this->maxLeafNodeLimit = 3;
-    this->root = nullptr;
 }
 
 BPTree::BPTree(int degreeInternal, int degreeLeaf) {
+    // An internal node needs >= 3 children and a leaf >= 2 keys, otherwise
+    // splits and merges cannot keep every node at least half full.
+    if (degreeInternal < 3 || degreeLeaf < 2)
+        throw invalid_argument("BPTree needs degreeInternal >= 3 and degreeLeaf >= 2");
     this->maxIntChildLimit = degreeInternal;
     this->maxLeafNodeLimit = degreeLeaf;
     this->root = nullptr;
@@ -57,8 +59,8 @@ int BPTree::getMaxLeafNodeLimit() const {
     return maxLeafNodeLimit;
 }
 
-Node* BPTree::getRoot() const {
-    return this->root;
+bool BPTree::isEmpty() const {
+    return root == nullptr;
 }
 
 LeafNode* BPTree::findLeaf(int key, InternalNode** parent, int* childIdx) const {

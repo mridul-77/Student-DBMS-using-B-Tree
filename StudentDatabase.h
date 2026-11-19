@@ -61,8 +61,20 @@ class StudentDatabase {
             std::cout << "Unable to delete the record file of roll No: " << rollNo << std::endl;
     }
 
-    void display() const { index.display(index.getRoot()); }
-    void seqDisplay() const { index.seqDisplay(index.getRoot()); }
+    // Persistent storage: rebuild the index from the records saved in earlier runs
+    int loadFromStorage() {
+        std::streambuf* console = std::cout.rdbuf(nullptr);  // hide split messages while bulk loading
+        int loaded = 0;
+        for (const auto& record : store.loadAll()) {
+            if (index.insert(record.first, record.second))
+                loaded++;
+        }
+        std::cout.rdbuf(console);
+        return loaded;
+    }
+
+    void display() const { index.display(); }
+    void seqDisplay() const { index.seqDisplay(); }
 };
 
 #endif

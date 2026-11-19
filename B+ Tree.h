@@ -27,7 +27,7 @@
 class BPTree;
 
 class Node {
-   protected:
+   private:
     std::vector<int> keys;  // sorted keys stored in this node
 
    public:
@@ -71,6 +71,10 @@ class BPTree {
 
         Single Responsibility: BPTree only maintains the index (key -> data pointer).
         It never opens, reads or deletes record files; that is RecordStore's job.
+
+        Encapsulation: nodes never leave this class. The public interface works only
+        with keys and data pointers; the root and all node pointers stay private, and
+        the constructor rejects limits that would break the invariants above.
     */
    private:
     int maxIntChildLimit;  // max #children of an internal node (fan-out)
@@ -88,18 +92,18 @@ class BPTree {
     void destroy(Node* cursor);
 
    public:
-    BPTree();
-    BPTree(int degreeInternal, int degreeLeaf);
+    BPTree();                                    // defaults: 4 children, 3 leaf keys
+    BPTree(int degreeInternal, int degreeLeaf);  // throws invalid_argument if degreeInternal < 3 or degreeLeaf < 2
     ~BPTree();
     BPTree(const BPTree&) = delete;             // the tree owns its nodes,
     BPTree& operator=(const BPTree&) = delete;  // so copying is disabled
 
-    Node* getRoot() const;
     int getMaxIntChildLimit() const;
     int getMaxLeafNodeLimit() const;
+    bool isEmpty() const;
 
-    void display(Node* cursor) const;
-    void seqDisplay(Node* cursor) const;
+    void display() const;     // level order, one tree level per line
+    void seqDisplay() const;  // all keys in sorted order via the leaf links
     FILE* search(int key) const;            // data pointer of key, or nullptr if absent
     bool insert(int key, FILE* filePtr);    // false if key already exists
     FILE* removeKey(int key);               // data pointer of the removed key, or nullptr if absent

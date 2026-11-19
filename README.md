@@ -12,9 +12,12 @@ Implementing B+ tree using C++
 ## Usage :
 
 1.	Clone it to some place in your PC.
-2.	Install Visual Studios Community Edition -2019. 
-3.	File->create new project with existing code. 
-4.	Take a chill beer Run the code and Enjoy.
+2.	Compile with any C++11 (or newer) compiler, e.g. g++:
+	```
+	g++ -std=c++17 -o bptree.exe "B+ Tree.cpp" insertion.cpp search.cpp remove.cpp display.cpp utilFunc.cpp
+	```
+	(Visual Studio also works: File->create new project with existing code.)
+3.	Run `./bptree.exe`, choose the maximum children for internal nodes and maximum keys for leaf nodes, then use the menu to insert, search, print and delete.
 (PS. Create an issue if you find any bug. Will be happy to fix it :))
 HAPPY CODING !!
 
@@ -26,26 +29,49 @@ Our DataBase Schema Will look something like this-
 
 ## Summary- What is the project all about? 
 
-This project is small version of database system. Where we efficiently implement the B+ Tree for fast and efficient access
-of files in the disc. Your database tuples will be stores as a .txt file in DBFiles folder corresponding FILE* will be saved in the 
-leaf node. Above step is done to mimic the disc-block access. *(TO-DO Delete the files in DBFiles folder after each run)*. If we want
-to make more tables then we can make that many BPTree objects !!
+This project is a small version of a database system: a C++ Student DBMS built on a custom B+ Tree, with dynamic splits,
+merges and primary-key inserts for O(log N) lookup. Every student tuple is stored as a .txt file in the DBFiles folder and
+the corresponding FILE* is saved in the leaf node as its data pointer. This mimics disc-block access. The files persist
+between runs: on startup the records in DBFiles are loaded back and the index is rebuilt. If we want to make more tables
+then we can make that many BPTree objects !!
+
+## Project Design :
+
+| File | Responsibility |
+|---|---|
+| `B+ Tree.h` | `Node` hierarchy and the `BPTree` class |
+| `insertion.cpp`, `search.cpp`, `remove.cpp`, `display.cpp`, `utilFunc.cpp` | B+ Tree operations, one module each |
+| `RecordStore.h` | Storage layer: abstract `RecordStore` interface and `FileRecordStore` (DBFiles) |
+| `StudentDatabase.h` | Connects the index (`BPTree`) with the storage (`RecordStore`) |
+| `B+ Tree.cpp` | `main`: menu and user input only |
+
+- **Inheritance :** `Node` is an abstract base class (pure virtual `isLeaf()`). `LeafNode` (keys, FILE* data pointers, link
+  to next leaf) and `InternalNode` (keys, child pointers) inherit from it. `FileRecordStore` inherits from `RecordStore`.
+- **Encapsulation & Friend Classes :** node members are private and only `BPTree` can access them through `friend class BPTree`.
+  The tree never exposes node pointers: its public interface works only with keys and data pointers, and the constructor
+  rejects limits that would break the B+ Tree properties.
+- **SOLID :**
+	- *Single Responsibility* - `BPTree` only indexes, `FileRecordStore` only does file I/O, `StudentDatabase` coordinates, `main` only takes input.
+	- *Open/Closed* - a new storage backend is just a new `RecordStore` subclass; the tree and database code do not change.
+	- *Liskov Substitution* - any `RecordStore` subclass works where a `RecordStore&` is expected, and both node types work as a `Node*`.
+	- *Interface Segregation* - `RecordStore` has only the four operations the database needs (write, read, remove, loadAll).
+	- *Dependency Inversion* - `StudentDatabase` depends on the `RecordStore` abstraction, not on the concrete file store.
 
 ## Assumptions in our Tree :
 
-1.	We are making a right biased tree. By this we mean if maxLimits are even we will split them
-	in such a way that right sibling has one element greater.
+1.	We are making a left biased tree. By this we mean if a full node cannot be split into two equal halves,
+	the left node keeps one element more than the right sibling.
 
 2.	Insertion is based on the primary key. Hence all the properties of the primary key has to be followed.
-	No dublicate insertion has to be done with same primary key!
+	Duplicate insertion with the same primary key is rejected!
 
 3.	In the code we have used a ptr2parent which directly give access to the parent of the node with ease, which is little
 	bit deviated from B+ Tree defination where we don't use it. Consequences of this are yet to be unfold. Meanwhile, I have
 	added it as a  question in [stackoverflow](https://stackoverflow.com/questions/57831014/why-we-are-not-saving-the-parent-pointer-in-b-tree-for-easy-upward-traversal-in) (NOW IT HAS BEEN REMOVED AS IT WILL CREATE A MESS WHILE DELETION).
 
-4.	We are saving the \*ptr2next explicitly while ideally it is saved as the last pointer in the pointerset. But here as we 
-	are using union to save the memory and seperate the leaf and non-leaf nodes, because of this \*ptr2next is explicitly
-	saved !!
+4.	We are saving the \*ptr2next explicitly while ideally it is saved as the last pointer in the pointerset. Leaf and
+	non-leaf nodes are separate classes (`LeafNode` and `InternalNode`), so only `LeafNode` has \*ptr2next and its data
+	pointers, while `InternalNode` has only child pointers !!
 
 
 ## Some UseFul Properties of B+ Tree:
