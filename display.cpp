@@ -1,67 +1,55 @@
 #include <iostream>
 #include <queue>
-#ifndef NODE_H
 #include "B+ Tree.h"
 
+using namespace std;
 
-void BPTree::display(Node* cursor) {
+void BPTree::display(Node* cursor) const {
     /*
-		Depth First Display
-
-    if (cursor != NULL) {
-        for (int i = 0; i < cursor->keys.size(); i++)
-            cout << cursor->keys[i] << " ";
-        cout << endl;
-        if (cursor->isLeaf != true) {
-            for (int i = 0; i < cursor->ptr2TreeOrData.ptr2Tree.size(); i++)
-                display(cursor->ptr2TreeOrData.ptr2Tree[i]);
-        }
+        Level Order Display (BFS): one tree level per line, nodes separated by ||
+    */
+    if (cursor == nullptr) {
+        cout << "No Data in the Database yet!" << endl;
+        return;
     }
-    */
-
-    /*
-        Level Order Display
-    */
-    if (cursor == NULL) return;
     queue<Node*> q;
     q.push(cursor);
 
     while (!q.empty()) {
         int sz = q.size();
         for (int i = 0; i < sz; i++) {
-            Node* u = q.front(); q.pop();
+            Node* u = q.front();
+            q.pop();
 
             //printing keys in self
             for (int val : u->keys)
                 cout << val << " ";
 
-            cout << "|| ";//to seperate next adjacent nodes
-            
-            if (u->isLeaf != true) {
-                for (Node* v : u->ptr2TreeOrData.ptr2Tree) {
+            cout << "|| ";  //to seperate next adjacent nodes
+
+            if (!u->isLeaf()) {
+                for (Node* v : asInternal(u)->ptr2Tree)
                     q.push(v);
-                }
             }
         }
         cout << endl;
     }
 }
 
-void BPTree::seqDisplay(Node* cursor) {
-    Node* firstLeft = firstLeftNode(cursor);
+void BPTree::seqDisplay(Node* cursor) const {
+    /*
+        Sequential Display: walk the linked list of leaves (all keys in sorted order)
+    */
+    LeafNode* firstLeft = firstLeftNode(cursor);
 
-    if (firstLeft == NULL) {
+    if (firstLeft == nullptr) {
         cout << "No Data in the Database yet!" << endl;
         return;
     }
-    while (firstLeft != NULL) {
-        for (int i = 0; i < firstLeft->keys.size(); i++) {
-            cout << firstLeft->keys[i] << " ";
-        }
-
+    while (firstLeft != nullptr) {
+        for (int key : firstLeft->keys)
+            cout << key << " ";
         firstLeft = firstLeft->ptr2next;
     }
     cout << endl;
 }
-
-#endif 

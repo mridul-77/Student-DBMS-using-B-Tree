@@ -1,336 +1,214 @@
 #include <iostream>
-#include <cstring>
+#include <algorithm>
 #include "B+ Tree.h"
 
-void BPTree::removeKey(int x) {
-	Node* root = getRoot();
+using namespace std;
 
-	// If tree is empty
-	if (root == NULL) {
-		cout << "B+ Tree is Empty" << endl;
-		return;
-	}
+FILE* BPTree::removeKey(int x) {
+    // If tree is empty
+    if (root == nullptr) {
+        cout << "B+ Tree is Empty" << endl;
+        return nullptr;
+    }
 
-	Node* cursor = root;
-	Node* parent;
-	int leftSibling, rightSibling;
+    // Going to the Leaf Node which may contain the *key*, remembering the parent
+    // and which child of the parent we went into (siblings are childIdx-1 and childIdx+1)
+    InternalNode* parent = nullptr;
+    int childIdx = -1;
+    LeafNode* cursor = findLeaf(x, &parent, &childIdx);
 
-	// Going to the Leaf Node, Which may contain the *key*
-	// TO-DO : Use Binary Search to find the val
-	while (cursor->isLeaf != true) {
-		for (int i = 0; i < cursor->keys.size(); i++) {
-			parent = cursor;
-			leftSibling = i - 1;//left side of the parent node
-			rightSibling = i + 1;// right side of the parent node
+    // Check if the value exists in this leaf node (binary search)
+    int pos = lower_bound(cursor->keys.begin(), cursor->keys.end(), x) - cursor->keys.begin();
+    if (pos == (int)cursor->keys.size() || cursor->keys[pos] != x) {
+        cout << "Key Not Found in the Tree" << endl;
+        return nullptr;
+    }
 
-			if (x < cursor->keys[i]) {
-				cursor = cursor->ptr2TreeOrData.ptr2Tree[i];
-				break;
-			}
-			if (i == cursor->keys.size() - 1) {
-				leftSibling = i;
-				rightSibling = i + 2;// CHECK here , might need to make it negative
-				cursor = cursor->ptr2TreeOrData.ptr2Tree[i+1];
-				break;
-			}
-		}
-	}
+    // Remove key & its data pointer from the leaf (vector::erase shifts the rest left)
+    FILE* removedData = cursor->dataPtr[pos];
+    cursor->keys.erase(cursor->keys.begin() + pos);
+    cursor->dataPtr.erase(cursor->dataPtr.begin() + pos);
+    cout << "Deleted " << x << " From Leaf Node successfully" << endl;
 
-	// Check if the value exists in this leaf node
-	int pos = 0;
-	bool found = false;
-	for (pos = 0; pos < cursor->keys.size(); pos++) {
-		if (cursor->keys[pos] == x) {
-			found = true;
-			break;
-		}
-	}
+    // If it is leaf as well as the root node
+    if (cursor == root) {
+        if (cursor->keys.empty()) {
+            // Tree becomes empty
+            delete cursor;
+            root = nullptr;
+            cout << "Ohh!! Our Tree is Empty Now :(" << endl;
+        }
+        return removedData;
+    }
 
-	auto itr = lower_bound(cursor->keys.begin(), cursor->keys.end(), x);
+    int minLeafKeys = (maxLeafNodeLimit + 1) / 2;  // ceil(maxLeafNodeLimit / 2)
+    if ((int)cursor->keys.size() >= minLeafKeys) {
+        //Sufficient keys available for invariant to hold
+        return removedData;
+    }
 
-	if (found == false) {
-		cout << "Key Not Found in the Tree" << endl;
-		return;
-	}
-	
-	// Delete the respective File and FILE*
-	string fileName = "DBFiles/" + to_string(x) + ".txt";
-	char filePtr[256];
-	strcpy(filePtr, fileName.c_str());
+    cout << "UnderFlow in the leaf Node Happended" << endl;
+    cout << "Starting Redistribution..." << endl;
 
-	//delete cursor->ptr2TreeOrData.dataPtr[pos];//avoid memory leaks
-	if (remove(filePtr) == 0)
-		cout << "SuccessFully Deleted file: " << fileName << endl;
-	else
-		cout << "Unable to delete the file: " << fileName << endl;
+    int leftSibling = childIdx - 1;
+    int rightSibling = childIdx + 1;
 
-	// Shifting the keys and dataPtr for the leaf Node
-	for (int i = pos; i < cursor->keys.size()-1; i++) {
-		cursor->keys[i] = cursor->keys[i+1];
-		cursor->ptr2TreeOrData.dataPtr[i] = cursor->ptr2TreeOrData.dataPtr[i + 1];
-	}
-	int prev_size = cursor->keys.size();
-	cursor->keys.resize(prev_size - 1);
-	cursor->ptr2TreeOrData.dataPtr.resize(prev_size - 1);
+    //1. Try to borrow a key from leftSibling
+    if (leftSibling >= 0) {
+        LeafNode* leftNode = asLeaf(parent->ptr2Tree[leftSibling]);
 
-	// If it is leaf as well as the root node
-	if (cursor == root) {
-		if (cursor->keys.size() == 0) {
-			// Tree becomes empty
-			setRoot(NULL);
-			cout << "Ohh!! Our Tree is Empty Now :(" << endl;
-		}
-	}
-	
-	cout << "Deleted " << x << " From Leaf Node successfully" << endl;
-	if ((cursor->keys.size() >= (getMaxLeafNodeLimit() + 1) / 2) || (cursor == root)) {
-		//Sufficient Node available for invariant to hold
-		return;
-	}
+        //Check if LeftSibling has extra Key to transfer
+        if ((int)leftNode->keys.size() > minLeafKeys) {
+            //Transfer the maximum key from the left Sibling
+            cursor->keys.insert(cursor->keys.begin(), leftNode->keys.back());
+            cursor->dataPtr.insert(cursor->dataPtr.begin(), leftNode->dataPtr.back());
+            leftNode->keys.pop_back();
+            leftNode->dataPtr.pop_back();
 
-	cout << "UnderFlow in the leaf Node Happended" << endl;
-	cout << "Starting Redistribution..." << endl;
+            //Update Parent: separator between leftNode and cursor
+            parent->keys[leftSibling] = cursor->keys[0];
+            cout << "Transferred from left sibling of leaf node" << endl;
+            return removedData;
+        }
+    }
 
-	//1. Try to borrow a key from leftSibling
-	if (leftSibling >= 0) {
-		Node* leftNode = parent->ptr2TreeOrData.ptr2Tree[leftSibling];
+    //2. Try to borrow a key from rightSibling
+    if (rightSibling < (int)parent->ptr2Tree.size()) {
+        LeafNode* rightNode = asLeaf(parent->ptr2Tree[rightSibling]);
 
-		//Check if LeftSibling has extra Key to transfer
-		if (leftNode->keys.size() >= (getMaxLeafNodeLimit()+1) / 2 +1) {
+        //Check if RightSibling has extra Key to transfer
+        if ((int)rightNode->keys.size() > minLeafKeys) {
+            //Transfer the minimum key from the right Sibling
+            cursor->keys.push_back(rightNode->keys.front());
+            cursor->dataPtr.push_back(rightNode->dataPtr.front());
+            rightNode->keys.erase(rightNode->keys.begin());
+            rightNode->dataPtr.erase(rightNode->dataPtr.begin());
 
-			//Transfer the maximum key from the left Sibling
-			int maxIdx = leftNode->keys.size()-1;
-			cursor->keys.insert(cursor->keys.begin(), leftNode->keys[maxIdx]);
-			cursor->ptr2TreeOrData.dataPtr
-				.insert(cursor->ptr2TreeOrData.dataPtr.begin(), leftNode->ptr2TreeOrData.dataPtr[maxIdx]);
+            //Update Parent: separator between cursor and rightNode
+            parent->keys[childIdx] = rightNode->keys[0];
+            cout << "Transferred from right sibling of leaf node" << endl;
+            return removedData;
+        }
+    }
 
-			//resize the left Sibling Node After Tranfer
-			leftNode->keys.resize(maxIdx);
-			leftNode->ptr2TreeOrData.dataPtr.resize(maxIdx);
-
-			//Update Parent
-			parent->keys[leftSibling] = cursor->keys[0];
-			printf("Transferred from left sibling of leaf node\n");
-			return;
-		}
-	}
-
-	//2. Try to borrow a key from rightSibling
-	if (rightSibling < parent->ptr2TreeOrData.ptr2Tree.size()) {
-		Node* rightNode = parent->ptr2TreeOrData.ptr2Tree[rightSibling];
-
-		//Check if RightSibling has extra Key to transfer
-		if (rightNode->keys.size() >= (getMaxLeafNodeLimit() + 1) / 2 + 1) {
-
-			//Transfer the minimum key from the right Sibling
-			int minIdx = 0;
-			cursor->keys.push_back(rightNode->keys[minIdx]);
-			cursor->ptr2TreeOrData.dataPtr
-				.push_back(rightNode->ptr2TreeOrData.dataPtr[minIdx]);
-
-			//resize the right Sibling Node After Tranfer
-			rightNode->keys.erase(rightNode->keys.begin());
-			rightNode->ptr2TreeOrData.dataPtr.erase(rightNode->ptr2TreeOrData.dataPtr.begin());
-
-			//Update Parent
-			parent->keys[rightSibling-1] = rightNode->keys[0];
-			printf("Transferred from right sibling of leaf node\n");
-			return;
-		}
-	}
-
-	// Merge and Delete Node
-	if (leftSibling >= 0) {// If left sibling exists
-		Node* leftNode = parent->ptr2TreeOrData.ptr2Tree[leftSibling];
-		//Transfer Key and dataPtr to leftSibling and connect ptr2next
-		for (int i = 0; i < cursor->keys.size(); i++) {
-			leftNode->keys.push_back(cursor->keys[i]);
-			leftNode->ptr2TreeOrData.dataPtr
-				.push_back(cursor->ptr2TreeOrData.dataPtr[i]);
-		}
-		leftNode->ptr2next = cursor->ptr2next;
-		cout << "Merging two leaf Nodes" << endl;
-		removeInternal(parent->keys[leftSibling], parent, cursor);//delete parent Node Key
-		//delete cursor;
-	}
-	else if (rightSibling <= parent->keys.size()) {
-		Node* rightNode = parent->ptr2TreeOrData.ptr2Tree[rightSibling];
-		//Transfer Key and dataPtr to rightSibling and connect ptr2next
-		for (int i = 0; i < rightNode->keys.size(); i++) {
-			cursor->keys.push_back(rightNode->keys[i]);
-			cursor->ptr2TreeOrData.dataPtr
-				.push_back(rightNode->ptr2TreeOrData.dataPtr[i]);
-		}
-		cursor->ptr2next = rightNode->ptr2next;
-		cout << "Merging two leaf Nodes" << endl;
-		removeInternal(parent->keys[rightSibling-1], parent, rightNode);//delete parent Node Key
-		//delete rightNode;
-	}
-
+    //3. Merge and Delete Node (the right node of the pair is always the one removed)
+    if (leftSibling >= 0) {
+        // leftNode <- cursor
+        LeafNode* leftNode = asLeaf(parent->ptr2Tree[leftSibling]);
+        leftNode->keys.insert(leftNode->keys.end(), cursor->keys.begin(), cursor->keys.end());
+        leftNode->dataPtr.insert(leftNode->dataPtr.end(), cursor->dataPtr.begin(), cursor->dataPtr.end());
+        leftNode->ptr2next = cursor->ptr2next;
+        cout << "Merging two leaf Nodes" << endl;
+        removeInternal(parent, cursor);  //delete parent Node Key
+        delete cursor;
+    } else {
+        // cursor <- rightNode
+        LeafNode* rightNode = asLeaf(parent->ptr2Tree[rightSibling]);
+        cursor->keys.insert(cursor->keys.end(), rightNode->keys.begin(), rightNode->keys.end());
+        cursor->dataPtr.insert(cursor->dataPtr.end(), rightNode->dataPtr.begin(), rightNode->dataPtr.end());
+        cursor->ptr2next = rightNode->ptr2next;
+        cout << "Merging two leaf Nodes" << endl;
+        removeInternal(parent, rightNode);  //delete parent Node Key
+        delete rightNode;
+    }
+    return removedData;
 }
 
-void BPTree::removeInternal(int x, Node* cursor, Node* child) {
-	Node* root = getRoot();
+void BPTree::removeInternal(InternalNode* cursor, Node* child) {
+    /*
+        Removes `child` from cursor's children together with the separator key
+        just left of it (child is always the right node of a merged pair).
+    */
+    int pos = find(cursor->ptr2Tree.begin(), cursor->ptr2Tree.end(), child) - cursor->ptr2Tree.begin();
+    cursor->keys.erase(cursor->keys.begin() + pos - 1);
+    cursor->ptr2Tree.erase(cursor->ptr2Tree.begin() + pos);
 
-	// Check if key from root is to deleted
-	if (cursor == root) {
-		if (cursor->keys.size() == 1) {
-			// If only one key is left and matches with one of the
-			// child Pointers
-			if (cursor->ptr2TreeOrData.ptr2Tree[1] == child) {
-				setRoot(cursor->ptr2TreeOrData.ptr2Tree[0]);
-				//delete cursor;
-				cout << "Wow! New Changed Root" <<endl;
-				return;
-			}
-			else if (cursor->ptr2TreeOrData.ptr2Tree[0] == child) {
-				setRoot(cursor->ptr2TreeOrData.ptr2Tree[1]);
-				//delete cursor;
-				cout << "Wow! New Changed Root" << endl;
-				return;
-			}
-		}
-	}
+    // Root is allowed to go below the minimum; if it has no keys left,
+    // its only child becomes the new root (tree height shrinks by one)
+    if (cursor == root) {
+        if (cursor->keys.empty()) {
+            root = cursor->ptr2Tree[0];
+            delete cursor;
+            cout << "Wow! New Changed Root" << endl;
+        }
+        return;
+    }
 
-	// Deleting key x from the parent
-	int pos;
-	for (pos = 0; pos < cursor->keys.size(); pos++) {
-		if (cursor->keys[pos] == x) {
-			break;
-		}
-	}
-	for (int i = pos; i < cursor->keys.size()-1; i++) {
-		cursor->keys[i] = cursor->keys[i + 1];
-	}
-	cursor->keys.resize(cursor->keys.size() - 1);
+    int minIntKeys = (maxIntChildLimit + 1) / 2 - 1;  // ceil(maxIntChildLimit / 2) - 1
 
-	// Now deleting the ptr2tree
-	for (pos = 0; pos < cursor->ptr2TreeOrData.ptr2Tree.size(); pos++) {
-		if (cursor->ptr2TreeOrData.ptr2Tree[pos] == child) {
-			break;
-		}
-	}
+    // If there is No underflow. Phew!!
+    if ((int)cursor->keys.size() >= minIntKeys) {
+        cout << "Deleted key from internal node successfully" << endl;
+        return;
+    }
 
-	for (int i = pos; i < cursor->ptr2TreeOrData.ptr2Tree.size() - 1; i++) {
-		cursor->ptr2TreeOrData.ptr2Tree[i] = cursor->ptr2TreeOrData.ptr2Tree[i + 1];
-	}
-	cursor->ptr2TreeOrData.ptr2Tree
-		.resize(cursor->ptr2TreeOrData.ptr2Tree.size()-1);
+    cout << "UnderFlow in internal Node! What did you do :/" << endl;
 
-	// If there is No underflow. Phew!!
-	if (cursor->keys.size() >= (getMaxIntChildLimit() + 1) / 2 - 1) {
-		cout << "Deleted " << x << " from internal node successfully\n";
-		return;
-	}
+    InternalNode* parent = findParent(asInternal(root), cursor);
 
-	cout << "UnderFlow in internal Node! What did you do :/" << endl;
+    // Finding Left and Right Siblings as we did earlier
+    int idx = find(parent->ptr2Tree.begin(), parent->ptr2Tree.end(), cursor) - parent->ptr2Tree.begin();
+    int leftSibling = idx - 1;
+    int rightSibling = idx + 1;
 
-	if (cursor == root) {
-		return;
-	}
+    // If possible borrow from leftSibling (rotate through the parent)
+    if (leftSibling >= 0) {
+        InternalNode* leftNode = asInternal(parent->ptr2Tree[leftSibling]);
 
-	Node** p1 = findParent(root, cursor);
-	Node* parent = *p1;
+        if ((int)leftNode->keys.size() > minIntKeys) {
+            // parent key comes down into cursor, left's max key goes up into parent
+            cursor->keys.insert(cursor->keys.begin(), parent->keys[leftSibling]);
+            parent->keys[leftSibling] = leftNode->keys.back();
+            leftNode->keys.pop_back();
 
-	int leftSibling, rightSibling;
+            // left's last child moves over to cursor
+            cursor->ptr2Tree.insert(cursor->ptr2Tree.begin(), leftNode->ptr2Tree.back());
+            leftNode->ptr2Tree.pop_back();
 
-	// Finding Left and Right Siblings as we did earlier
-	for (pos = 0; pos < parent->ptr2TreeOrData.ptr2Tree.size(); pos++) {
-		if (parent->ptr2TreeOrData.ptr2Tree[pos] == cursor) {
-			leftSibling = pos - 1;
-			rightSibling = pos + 1;
-			break;
-		}
-	}
+            cout << "Transferred from left sibling of internal node" << endl;
+            return;
+        }
+    }
 
-	// If possible transfer to leftSibling
-	if (leftSibling >= 0) {
-		Node* leftNode = parent->ptr2TreeOrData.ptr2Tree[leftSibling];
+    // If possible borrow from rightSibling (rotate through the parent)
+    if (rightSibling < (int)parent->ptr2Tree.size()) {
+        InternalNode* rightNode = asInternal(parent->ptr2Tree[rightSibling]);
 
-		//Check if LeftSibling has extra Key to transfer
-		if (leftNode->keys.size() >= (getMaxIntChildLimit() + 1) / 2 ) {
+        if ((int)rightNode->keys.size() > minIntKeys) {
+            // parent key comes down into cursor, right's min key goes up into parent
+            cursor->keys.push_back(parent->keys[idx]);
+            parent->keys[idx] = rightNode->keys.front();
+            rightNode->keys.erase(rightNode->keys.begin());
 
-			//transfer key from left sibling through parent
-			int maxIdxKey = leftNode->keys.size() - 1;
-			cursor->keys.insert(cursor->keys.begin(), parent->keys[leftSibling]);
-			parent->keys[leftSibling] = leftNode->keys[maxIdxKey];
+            // right's first child moves over to cursor
+            cursor->ptr2Tree.push_back(rightNode->ptr2Tree.front());
+            rightNode->ptr2Tree.erase(rightNode->ptr2Tree.begin());
 
-			int maxIdxPtr = leftNode->ptr2TreeOrData.ptr2Tree.size()-1;
-			cursor->ptr2TreeOrData.ptr2Tree
-				.insert(cursor->ptr2TreeOrData.ptr2Tree.begin(), leftNode->ptr2TreeOrData.ptr2Tree[maxIdxPtr]);
+            cout << "Transferred from right sibling of internal node" << endl;
+            return;
+        }
+    }
 
-			//resize the left Sibling Node After Tranfer
-			leftNode->keys.resize(maxIdxKey);
-			leftNode->ptr2TreeOrData.dataPtr.resize(maxIdxPtr);
+    //Start to Merge Now, if None of the above cases applied
+    if (leftSibling >= 0) {
+        //leftNode + parent key + cursor
+        InternalNode* leftNode = asInternal(parent->ptr2Tree[leftSibling]);
+        leftNode->keys.push_back(parent->keys[leftSibling]);
+        leftNode->keys.insert(leftNode->keys.end(), cursor->keys.begin(), cursor->keys.end());
+        leftNode->ptr2Tree.insert(leftNode->ptr2Tree.end(), cursor->ptr2Tree.begin(), cursor->ptr2Tree.end());
 
-			return;
-		}
-	}
+        cout << "Merged with left sibling" << endl;
+        removeInternal(parent, cursor);
+        delete cursor;  // its children now belong to leftNode
+    } else {
+        //cursor + parent key + rightNode
+        InternalNode* rightNode = asInternal(parent->ptr2Tree[rightSibling]);
+        cursor->keys.push_back(parent->keys[idx]);
+        cursor->keys.insert(cursor->keys.end(), rightNode->keys.begin(), rightNode->keys.end());
+        cursor->ptr2Tree.insert(cursor->ptr2Tree.end(), rightNode->ptr2Tree.begin(), rightNode->ptr2Tree.end());
 
-	// If possible transfer to rightSibling
-	if (rightSibling < parent->ptr2TreeOrData.ptr2Tree.size()) {
-		Node* rightNode = parent->ptr2TreeOrData.ptr2Tree[rightSibling];
-
-		//Check if LeftSibling has extra Key to transfer
-		if (rightNode->keys.size() >= (getMaxIntChildLimit() + 1) / 2) {
-
-			//transfer key from right sibling through parent
-			int maxIdxKey = rightNode->keys.size() - 1;
-			cursor->keys.push_back(parent->keys[pos]);
-			parent->keys[pos] = rightNode->keys[0];
-			rightNode->keys.erase(rightNode->keys.begin());
-
-			//transfer the pointer from rightSibling to cursor
-			cursor->ptr2TreeOrData.ptr2Tree
-				.push_back(rightNode->ptr2TreeOrData.ptr2Tree[0]);
-			cursor->ptr2TreeOrData.ptr2Tree
-				.erase(cursor->ptr2TreeOrData.ptr2Tree.begin());
-			 
-			return;
-		}
-	}
-
-	//Start to Merge Now, if None of the above cases applied
-	if (leftSibling >= 0) {
-		//leftNode + parent key + cursor
-		Node* leftNode = parent->ptr2TreeOrData.ptr2Tree[leftSibling];
-		leftNode->keys.push_back(parent->keys[leftSibling]);
-
-		for (int val : cursor->keys) {
-			leftNode->keys.push_back(val);
-		}
-
-		for (int i = 0; i < cursor->ptr2TreeOrData.ptr2Tree.size(); i++) {
-			leftNode->ptr2TreeOrData.ptr2Tree
-				.push_back(cursor->ptr2TreeOrData.ptr2Tree[i]);
-			cursor->ptr2TreeOrData.ptr2Tree[i] = NULL;
-		}
-
-		cursor->ptr2TreeOrData.ptr2Tree.resize(0);
-		cursor->keys.resize(0);
-
-		removeInternal(parent->keys[leftSibling], parent, cursor);
-		cout << "Merged with left sibling"<<endl;
-	}
-	else if (rightSibling < parent->ptr2TreeOrData.ptr2Tree.size()) {
-		//cursor + parentkey +rightNode
-		Node* rightNode = parent->ptr2TreeOrData.ptr2Tree[rightSibling];
-		cursor->keys.push_back(parent->keys[rightSibling - 1]);
-
-		for (int val : rightNode->keys) {
-			cursor->keys.push_back(val);
-		}
-
-		for (int i = 0; i < rightNode->ptr2TreeOrData.ptr2Tree.size(); i++) {
-			cursor->ptr2TreeOrData.ptr2Tree
-				.push_back(rightNode->ptr2TreeOrData.ptr2Tree[i]);
-			rightNode->ptr2TreeOrData.ptr2Tree[i] = NULL;
-		}
-
-		rightNode->ptr2TreeOrData.ptr2Tree.resize(0);
-		rightNode->keys.resize(0);
-
-		removeInternal(parent->keys[rightSibling - 1], parent, rightNode);
-		cout << "Merged with right sibling\n";
-	}
+        cout << "Merged with right sibling" << endl;
+        removeInternal(parent, rightNode);
+        delete rightNode;  // its children now belong to cursor
+    }
 }

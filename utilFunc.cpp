@@ -1,18 +1,8 @@
 #include <iostream>
+#include <algorithm>
 #include "B+ Tree.h"
 
-Node* parent = NULL;
-
-Node::ptr::ptr() {
-}
-
-Node::ptr::~ptr() {
-}
-
-Node::Node() {
-    this->isLeaf = false;
-    this->ptr2next = NULL;
-}
+using namespace std;
 
 BPTree::BPTree() {
     /*
@@ -26,64 +16,92 @@ BPTree::BPTree() {
         data pointer in the leaf nodes is large so we can only put less
         nodes in the leafs as compared to the internal Nodes. Thats the
         reson to reperate out these to variables.
-
     */
     this->maxIntChildLimit = 4;
     this->maxLeafNodeLimit = 3;
-    this->root = NULL;
+    this->root = nullptr;
 }
 
 BPTree::BPTree(int degreeInternal, int degreeLeaf) {
     this->maxIntChildLimit = degreeInternal;
     this->maxLeafNodeLimit = degreeLeaf;
-    this->root = NULL;
+    this->root = nullptr;
 }
 
-int BPTree::getMaxIntChildLimit() {
+BPTree::~BPTree() {
+    destroy(root);  // free every node; no memory leaks
+}
+
+void BPTree::destroy(Node* cursor) {
+    if (cursor == nullptr) return;
+    if (!cursor->isLeaf()) {
+        for (Node* child : asInternal(cursor)->ptr2Tree)
+            destroy(child);
+    }
+    delete cursor;  // virtual destructor -> correct subclass destructor runs
+}
+
+LeafNode* BPTree::asLeaf(Node* node) {
+    return static_cast<LeafNode*>(node);
+}
+
+InternalNode* BPTree::asInternal(Node* node) {
+    return static_cast<InternalNode*>(node);
+}
+
+int BPTree::getMaxIntChildLimit() const {
     return maxIntChildLimit;
 }
 
-int BPTree::getMaxLeafNodeLimit() {
+int BPTree::getMaxLeafNodeLimit() const {
     return maxLeafNodeLimit;
 }
 
-Node* BPTree::getRoot() {
+Node* BPTree::getRoot() const {
     return this->root;
 }
 
-void BPTree::setRoot(Node *ptr) {
-    this->root = ptr;
-}
-
-Node* BPTree::firstLeftNode(Node* cursor) {
-    if (cursor->isLeaf)
-        return cursor;
-    for (int i = 0; i < cursor->ptr2TreeOrData.ptr2Tree.size(); i++)
-        if (cursor->ptr2TreeOrData.ptr2Tree[i] != NULL)
-            return firstLeftNode(cursor->ptr2TreeOrData.ptr2Tree[i]);
-
-    return NULL;
-}
-
-Node** BPTree::findParent(Node* cursor, Node* child) {
+LeafNode* BPTree::findLeaf(int key, InternalNode** parent, int* childIdx) const {
     /*
-		Finds parent using depth first traversal and ignores leaf nodes as they cannot be parents
-		also ignores second last level because we will never find parent of a leaf node during insertion using this function
-	*/
+        Walks from the root down to the leaf where `key` is (or would be).
+        Optionally reports that leaf's parent and its index among the parent's children.
 
-    if (cursor->isLeaf || cursor->ptr2TreeOrData.ptr2Tree[0]->isLeaf)
-        return NULL;
+        upper_bound returns the first key strictly greater than `key`. Equal keys go
+        right because when a leaf splits, the separator copied up stays in the right leaf.
+    */
+    Node* cursor = root;
+    if (parent) *parent = nullptr;
+    if (childIdx) *childIdx = -1;
 
-    for (int i = 0; i < cursor->ptr2TreeOrData.ptr2Tree.size(); i++) {
-        if (cursor->ptr2TreeOrData.ptr2Tree[i] == child) {
-            parent = cursor;
-        } else {
-            //Commenting To Remove vector out of bound Error: 
-            //new (&cursor->ptr2TreeOrData.ptr2Tree) std::vector<Node*>;
-            Node* tmpCursor = cursor->ptr2TreeOrData.ptr2Tree[i];
-            findParent(tmpCursor, child);
+    while (!cursor->isLeaf()) {
+        InternalNode* internal = asInternal(cursor);
+        int idx = upper_bound(internal->keys.begin(), internal->keys.end(), key) - internal->keys.begin();
+        if (parent) *parent = internal;
+        if (childIdx) *childIdx = idx;
+        cursor = internal->ptr2Tree[idx];
+    }
+    return asLeaf(cursor);
+}
+
+LeafNode* BPTree::firstLeftNode(Node* cursor) const {
+    if (cursor == nullptr) return nullptr;
+    while (!cursor->isLeaf())
+        cursor = asInternal(cursor)->ptr2Tree[0];
+    return asLeaf(cursor);
+}
+
+InternalNode* BPTree::findParent(InternalNode* cursor, Node* child) const {
+    /*
+        Finds the parent of `child` using depth first traversal starting at `cursor`.
+        Leaf nodes are skipped as they cannot be parents.
+    */
+    for (Node* next : cursor->ptr2Tree) {
+        if (next == child)
+            return cursor;
+        if (!next->isLeaf()) {
+            InternalNode* found = findParent(asInternal(next), child);
+            if (found) return found;
         }
     }
-
-    return &parent;
+    return nullptr;
 }

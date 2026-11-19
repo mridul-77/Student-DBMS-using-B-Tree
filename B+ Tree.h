@@ -1,71 +1,108 @@
-#include <iostream>
-#include <vector>
-#include <algorithm>
-#include <fstream>
-#include <string>
-//#include <filesystem>
-using namespace std;
+#ifndef BPLUS_TREE_H
+#define BPLUS_TREE_H
 
-#ifndef NODE_H
-#define NODE_H
+#include <cstdio>
+#include <vector>
+
+/*
+    Node hierarchy (Inheritance + Polymorphism)
+
+            Node            <- abstract base: what every node has (sorted keys)
+           /    \
+    LeafNode    InternalNode
+
+    - LeafNode     : keys + one data pointer (FILE*) per key + link to next leaf
+    - InternalNode : keys + (keys.size() + 1) child pointers
+
+    Generally the size of a node should be equal to the disk block size, which
+    limits the number of disk accesses. Internal nodes only hold tree pointers
+    (small), so they can hold more of them; only leaf nodes hold data pointers.
+
+    IMPORTANT := All the data has to be present in the leaf nodes.
+
+    Encapsulation: node internals are not public. Only BPTree may touch them,
+    which is granted through `friend class BPTree`.
+*/
+
+class BPTree;
 
 class Node {
-    /*
-		Generally size of the this node should be equal to the block size. Which will limit the number of disk access and increase the accesssing time.
-		Intermediate nodes only hold the Tree pointers which is of considerably small size(so they can hold more Tree pointers) and only Leaf nodes hold
-		the data pointer directly to the disc.
+   protected:
+    std::vector<int> keys;  // sorted keys stored in this node
 
-		IMPORTANT := All the data has to be present in the leaf node
-	*/
    public:
-    bool isLeaf;
-    vector<int> keys;
-    //Node* ptr2parent; //Pointer to go to parent node CANNOT USE check https://stackoverflow.com/questions/57831014/why-we-are-not-saving-the-parent-pointer-in-b-tree-for-easy-upward-traversal-in
-    Node* ptr2next;              //Pointer to connect next node for leaf nodes
-    union ptr {                  //to make memory efficient Node
-        vector<Node*> ptr2Tree;  //Array of pointers to Children sub-trees for intermediate Nodes
-        vector<FILE*> dataPtr;   // Data-Pointer for the leaf node
+    virtual ~Node() {}
+    virtual bool isLeaf() const = 0;  // pure virtual -> Node is abstract
 
-        ptr();   // To remove the error !?
-        ~ptr();  // To remove the error !?
-    } ptr2TreeOrData;
+    friend class BPTree;
+};
 
-    friend class BPTree;  // to access private members of the Node and hold the encapsulation concept
+class LeafNode : public Node {
+   private:
+    std::vector<FILE*> dataPtr;  // dataPtr[i] points to the record of keys[i]
+    LeafNode* ptr2next;          // next leaf, so all leaves form a sorted linked list
+
    public:
-    Node();
+    LeafNode() : ptr2next(nullptr) {}
+    bool isLeaf() const override { return true; }
+
+    friend class BPTree;
+};
+
+class InternalNode : public Node {
+   private:
+    std::vector<Node*> ptr2Tree;  // children; always keys.size() + 1 of them
+
+   public:
+    bool isLeaf() const override { return false; }
+
+    friend class BPTree;
 };
 
 class BPTree {
     /*
-		::For Root Node :=
-			The root node has, at least two tree pointers
-		::For Internal Nodes:=
-			1. ceil(maxIntChildLimit/2)     <=  #of children <= maxIntChildLimit
-			2. ceil(maxIntChildLimit/2)-1  <=  #of keys     <= maxIntChildLimit -1
-		::For Leaf Nodes :=
-			1. ceil(maxLeafNodeLimit/2)   <=  #of keys     <= maxLeafNodeLimit -1
-	*/
+        ::For Root Node :=
+            The root node has at least two tree pointers (or is a single leaf)
+        ::For Internal Nodes :=
+            1. ceil(maxIntChildLimit/2)     <=  #of children <= maxIntChildLimit
+            2. ceil(maxIntChildLimit/2)-1   <=  #of keys     <= maxIntChildLimit - 1
+        ::For Leaf Nodes :=
+            1. ceil(maxLeafNodeLimit/2)     <=  #of keys     <= maxLeafNodeLimit
+
+        Single Responsibility: BPTree only maintains the index (key -> data pointer).
+        It never opens, reads or deletes record files; that is RecordStore's job.
+    */
    private:
-    int maxIntChildLimit;                                   //Limiting  #of children for internal Nodes!
-    int maxLeafNodeLimit;                                   // Limiting #of nodes for leaf Nodes!!!
-    Node* root;                                             //Pointer to the B+ Tree root
-    void insertInternal(int x, Node** cursor, Node** child);  //Insert x from child in cursor(parent)
-    Node** findParent(Node* cursor, Node* child);
-    Node* firstLeftNode(Node* cursor);
+    int maxIntChildLimit;  // max #children of an internal node (fan-out)
+    int maxLeafNodeLimit;  // max #keys in a leaf node
+    Node* root;            // pointer to the B+ Tree root
+
+    static LeafNode* asLeaf(Node* node);
+    static InternalNode* asInternal(Node* node);
+
+    LeafNode* findLeaf(int key, InternalNode** parent = nullptr, int* childIdx = nullptr) const;
+    void insertInternal(int x, InternalNode* cursor, Node* child);  // insert x and child into cursor (parent)
+    void removeInternal(InternalNode* cursor, Node* child);         // remove child and its separator key from cursor
+    InternalNode* findParent(InternalNode* cursor, Node* child) const;
+    LeafNode* firstLeftNode(Node* cursor) const;
+    void destroy(Node* cursor);
 
    public:
     BPTree();
     BPTree(int degreeInternal, int degreeLeaf);
-    Node* getRoot();
-    int getMaxIntChildLimit();
-    int getMaxLeafNodeLimit();
-    void setRoot(Node *);
-    void display(Node* cursor);
-    void seqDisplay(Node* cursor);
-    void search(int key);
-    void insert(int key, FILE* filePtr);
-    void removeKey(int key);
-    void removeInternal(int x, Node* cursor, Node* child);
+    ~BPTree();
+    BPTree(const BPTree&) = delete;             // the tree owns its nodes,
+    BPTree& operator=(const BPTree&) = delete;  // so copying is disabled
+
+    Node* getRoot() const;
+    int getMaxIntChildLimit() const;
+    int getMaxLeafNodeLimit() const;
+
+    void display(Node* cursor) const;
+    void seqDisplay(Node* cursor) const;
+    FILE* search(int key) const;            // data pointer of key, or nullptr if absent
+    bool insert(int key, FILE* filePtr);    // false if key already exists
+    FILE* removeKey(int key);               // data pointer of the removed key, or nullptr if absent
 };
 
 #endif
