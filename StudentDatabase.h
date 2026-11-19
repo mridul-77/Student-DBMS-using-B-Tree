@@ -51,6 +51,19 @@ class StudentDatabase {
             std::cout << "But the record could not be read" << std::endl;
     }
 
+    void rangeSearch(int low, int high) const {
+        std::vector<std::pair<int, FILE*>> matches = index.rangeSearch(low, high);
+        std::cout << "Found " << matches.size() << " student(s) with roll No in [" << low << ", " << high << "]" << std::endl;
+        for (const auto& match : matches) {
+            std::string tuple;
+            std::cout << "  " << match.first << ": ";
+            if (store.read(match.second, tuple))
+                std::cout << tuple << std::endl;
+            else
+                std::cout << "(record could not be read)" << std::endl;
+        }
+    }
+
     void remove(int rollNo) {
         FILE* dataPtr = index.removeKey(rollNo);
         if (dataPtr == nullptr)

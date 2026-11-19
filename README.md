@@ -4,6 +4,7 @@ Implementing B+ tree using C++
 - [X] Insert
 - [X] Structuring the main Function
 - [X] Delete
+- [X] Range Search
 
 ## Demo :
 
@@ -17,7 +18,7 @@ Implementing B+ tree using C++
 	g++ -std=c++17 -o bptree.exe "B+ Tree.cpp" insertion.cpp search.cpp remove.cpp display.cpp utilFunc.cpp
 	```
 	(Visual Studio also works: File->create new project with existing code.)
-3.	Run `./bptree.exe`, choose the maximum children for internal nodes and maximum keys for leaf nodes, then use the menu to insert, search, print and delete.
+3.	Run `./bptree.exe`, choose the maximum children for internal nodes and maximum keys for leaf nodes, then use the menu to insert, search, range search, print and delete.
 (PS. Create an issue if you find any bug. Will be happy to fix it :))
 HAPPY CODING !!
 
@@ -106,6 +107,19 @@ then we can make that many BPTree objects !!
 
 
 	![B+ Search](img/search_1.png)
+
+
+## Range Search:
+
+To find every key k with low <= k <= high:
+
+1.	Descend once from the root to the leaf where *low* would be (same as Search) - O(log N).
+
+2.	From there, walk right using ***ptr2next*** through the linked leaves, collecting keys until a key
+	greater than *high* is found - O(K) for K results.
+
+Total cost is O(log N + K). This is the reason B+ Tree leaves are linked: a hash index would have
+to scan every record to answer a range query.
 
 
 

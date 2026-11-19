@@ -2,6 +2,7 @@
 #define BPLUS_TREE_H
 
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 /*
@@ -105,6 +106,7 @@ class BPTree {
     void display() const;     // level order, one tree level per line
     void seqDisplay() const;  // all keys in sorted order via the leaf links
     FILE* search(int key) const;            // data pointer of key, or nullptr if absent
+    std::vector<std::pair<int, FILE*>> rangeSearch(int low, int high) const;  // all keys in [low, high], sorted
     bool insert(int key, FILE* filePtr);    // false if key already exists
     FILE* removeKey(int key);               // data pointer of the removed key, or nullptr if absent
 };

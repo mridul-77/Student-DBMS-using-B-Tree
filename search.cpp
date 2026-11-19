@@ -20,3 +20,29 @@ FILE* BPTree::search(int key) const {
     */
     return cursor->dataPtr[idx];
 }
+
+vector<pair<int, FILE*>> BPTree::rangeSearch(int low, int high) const {
+    /*
+        Range query: O(log N + K), K = number of results.
+        This is why B+ Tree leaves are linked: descend once, then walk right.
+    */
+    vector<pair<int, FILE*>> result;
+    if (root == nullptr || low > high)
+        return result;
+
+    // 1. Descend once to the leaf where `low` would be: O(log N)
+    LeafNode* leaf = findLeaf(low);
+    int idx = lower_bound(leaf->keys.begin(), leaf->keys.end(), low) - leaf->keys.begin();
+
+    // 2. Walk right along the leaf links until a key exceeds `high`: O(K)
+    while (leaf != nullptr) {
+        for (; idx < (int)leaf->keys.size(); idx++) {
+            if (leaf->keys[idx] > high)
+                return result;
+            result.push_back({leaf->keys[idx], leaf->dataPtr[idx]});
+        }
+        leaf = leaf->ptr2next;
+        idx = 0;
+    }
+    return result;
+}

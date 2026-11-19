@@ -33,6 +33,14 @@ void searchMethod(const StudentDatabase& db) {
     db.search(rollNo);
 }
 
+void rangeSearchMethod(const StudentDatabase& db) {
+    int low, high;
+    cout << "Enter the range of RollNo (low high): ";
+    cin >> low >> high;
+
+    db.rangeSearch(low, high);
+}
+
 void printMethod(const StudentDatabase& db) {
     int opt;
     cout << "Press \n\t1.Hierarical-Display \n\t2.Sequential-Display\n";
@@ -92,7 +100,7 @@ int main() {
 
     do {
         cout << "\nPlease provide the queries with respective keys : " << endl;
-        cout << "\tPress 1: Insertion \n\tPress 2: Search \n\tPress 3: Print Tree\n\tPress 4: Delete Key In Tree\n\tPress 5: ABORT!" << endl;
+        cout << "\tPress 1: Insertion \n\tPress 2: Search \n\tPress 3: Print Tree\n\tPress 4: Delete Key In Tree\n\tPress 5: Range Search\n\tPress 6: ABORT!" << endl;
         if (!(cin >> option))
             break;  // input closed or not a number
 
@@ -108,6 +116,9 @@ int main() {
                 break;
             case 4:
                 deleteMethod(db);
+                break;
+            case 5:
+                rangeSearchMethod(db);
                 break;
             default:
                 flag = false;
