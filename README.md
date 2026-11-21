@@ -66,9 +66,9 @@ then we can make that many BPTree objects !!
 2.	Insertion is based on the primary key. Hence all the properties of the primary key has to be followed.
 	Duplicate insertion with the same primary key is rejected!
 
-3.	In the code we have used a ptr2parent which directly give access to the parent of the node with ease, which is little
-	bit deviated from B+ Tree defination where we don't use it. Consequences of this are yet to be unfold. Meanwhile, I have
-	added it as a  question in [stackoverflow](https://stackoverflow.com/questions/57831014/why-we-are-not-saving-the-parent-pointer-in-b-tree-for-easy-upward-traversal-in) (NOW IT HAS BEEN REMOVED AS IT WILL CREATE A MESS WHILE DELETION).
+3.	Nodes do not store a parent pointer. Splits, merges and borrows move children between nodes, so every moved child's
+	parent pointer would need updating. Instead, the parent of a leaf is remembered while descending (`findLeaf`), and
+	higher parents are found with `findParent`. (Keeping a stack of visited nodes on the way down would make this O(log N).)
 
 4.	We are saving the \*ptr2next explicitly while ideally it is saved as the last pointer in the pointerset. Leaf and
 	non-leaf nodes are separate classes (`LeafNode` and `InternalNode`), so only `LeafNode` has \*ptr2next and its data
